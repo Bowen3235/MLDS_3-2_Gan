@@ -4,6 +4,7 @@ from coder import*
 from Gan_new import*
 import cv2
 from PIL import Image
+import torch
 
 epo = 100
 
@@ -16,6 +17,7 @@ class Maneger(object):
 		self.guess = []
 		self.coder = coder()
 		self.Gan = Gan( )
+		self.testgan = torch.load( 'generator.pt' )
 	def train_coder(self , epo):
 		self.coder.train( epo )
 	def save_coder( self ,filename ):
@@ -44,6 +46,114 @@ class Maneger(object):
 		print( "after decoder  : {}".format( ''.join( chr(i) for i in o2 ) ) )
 	def train_gan(self):
 		self.Gan.train()
+	def test(self):
+		condition = input( "condition?\n" )
+		temp = [condition[ : condition.find('hair') - 1 ],condition[ condition.find('hair')+5 : condition.find('eye')-1 ]]
+		#print( temp )
+		tar = np.array([ np.zeros( 12 , dtype = float) , np.zeros( 12 ,dtype = float ) ])
+		for idx ,(j) in enumerate( temp ):
+			if j == 'orange':
+				tar[idx][0] = 1.0
+			elif j == 'white':
+				tar[idx][1] = 1.0
+			elif j =='aqua':
+				tar[idx][2] = 1.0
+			elif j == 'gray' or j=='yellow' :
+				tar[idx][3] = 1.0
+			elif j == 'green':
+				tar[idx][4] = 1.0
+			elif j == 'red':
+				tar[idx][5] = 1.0
+			elif j == 'purple':
+				tar[idx][6] = 1.0
+			elif j == 'pink':
+				tar[idx][7] = 1.0
+			elif j == 'blue':
+				tar[idx][8] = 1.0
+			elif j == 'black':
+				tar[idx][9] = 1.0
+			elif j == 'brown' :
+				tar[idx][10] = 1.0
+			elif j == 'blonde' :
+				tar[idx][11] = 1.0
+		tar = torch.FloatTensor(tar).view( 1,24 )
+		noise = torch.FloatTensor(np.random.normal(0.5,0.16,( 1 , 128))) 
+		pic = self.testgan( tar , noise ).view(64,64,3).detach()
+		print( pic.size() )
+		cv2.imshow( "image" , pic.numpy()/2+0.5 )
+		cv2.waitKey(0)
+		cv2.destroyAllWindows()
+		print( "Start making data base of all condition" )
+
+		for i in range( 12 ):
+			condition = ""
+			if i == 0 :
+				condition += 'orange'
+			elif i == 1 :
+				condition += 'white'
+			elif i == 2 :
+				condition += 'aqua'
+			elif i == 3 :
+				condition += 'gray'
+			elif i == 4 :
+				condition += 'green'
+			elif i == 5 :
+				condition += 'red'
+			elif i == 6 :
+				condition += 'purple'
+			elif i == 7 :
+				condition += 'pink'
+			elif i == 8 :
+				condition += 'blue'
+			elif i == 9 :
+				condition += 'black'
+			elif i == 10 :
+				condition += 'brown'
+			elif i == 11 :
+				condition += 'blonde'
+			condition += "_hair_"
+			condition_1 = condition
+
+			for j in range( 12 ):
+				condition = ""
+				if j == 0 :
+					condition += 'orange'
+				elif j == 1 :
+					condition += 'white'
+				elif j == 2 :
+					condition += 'aqua'
+				elif j == 3 :
+					condition += 'yellow'
+				elif j == 4 :
+					condition += 'green'
+				elif j == 5 :
+					condition += 'red'
+				elif j == 6 :
+					condition += 'purple'
+				elif j == 7 :
+					condition += 'pink'
+				elif j == 8 :
+					condition += 'blue'
+				elif j == 9 :
+					condition += 'black'
+				elif j == 10 :
+					condition += 'brown'
+				elif j == 11 :
+					condition += 'blonde'
+				condition += "_eye"
+				tar = np.array([ np.zeros( 12 , dtype = float) , np.zeros( 12 ,dtype = float ) ])
+				tar[0][i] = tar[1][j] = 1
+				tar = torch.FloatTensor(tar).view( 1,24 )
+				noise = torch.FloatTensor(np.random.normal(0.5,0.16,( 1 , 128))) 
+				pic = (self.testgan( tar , noise ).view(64,64,3).detach()/2+0.5)*255
+				os.makedirs( os.path.dirname( "test_pic_1103/" ), exist_ok=True )
+				cv2.imwrite( "test_pic_1103/"+condition_1+condition+".jpg" , pic.numpy() )
+				
+
+
+
+
+
 	def read_data(self):
 		#data_tag = open( "AnimeDataset/tags_clean.csv" ) 
 		#orin_data_tag = list(csv.reader( data_tag ))
@@ -62,7 +172,7 @@ class Maneger(object):
 			i[1:] = tempp
 			print( i )
 		'''
-		k = open( "extra_data/tags.csv" ) 
+		k = open( "small_data/tags.csv" ) 
 		extra_tag = list(csv.reader( k ))
 		k.close()
 		'''
@@ -114,7 +224,7 @@ class Maneger(object):
 		print(self.data_tag[0])
 
 		for i in range( len(extra_tag) ):
-			filename = 'extra_data/images/' + str( i ) + '.jpg'
+			filename = 'small_data/images/' + str( i ) + '.jpg'
 			im = cv2.imread( filename )
 			#self.data.append( [ im , extra_tag[i][1:] ]  )
 			self.data_im.append(im)
@@ -123,6 +233,7 @@ class Maneger(object):
 		self.Gan.read_data( self.data_im , self.data_tag )
 
 def main():
+	np.set_printoptions(precision=4)
 	Mgr = Maneger()
 	buf = []
 	while( buf!="q -f" ):
@@ -147,6 +258,8 @@ def main():
 			Mgr.read_data()
 		elif( buf=="train gan" ):
 			Mgr.train_gan()
+		elif( buf == "test" ):
+			Mgr.test()
 		elif( buf!="q -f" ): 
 			print("illegal cmd \"{}\"".format(buf))
 

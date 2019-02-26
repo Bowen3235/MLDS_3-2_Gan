@@ -13,8 +13,8 @@ class Gan(object):
     def __init__(self):
         self.gener = Generator()
         self.discr = Discriminator()
-        self.ge_optimizer = optim.Adam( self.gener.parameters() , lr = 1e-2 ,betas=(0.5, 0.99)  )
-        self.di_optimizer = optim.Adam( self.discr.parameters() , lr = 2*1e-4 ,betas=(0.5, 0.99)  )
+        self.ge_optimizer = optim.Adam( self.gener.parameters() , lr = 1e-4 ,betas=(0.5, 0.99)  )
+        self.di_optimizer = optim.Adam( self.discr.parameters() , lr = 1e-4 ,betas=(0.5, 0.99)  )
         self.batch_size = 64
         self.data = []
         self.data_im = []
@@ -44,11 +44,11 @@ class Gan(object):
                     #print( tags[0] )
                     #print( noise[0] )
                     self.train_gen( i , idx ,noise ,tags )
-                    self.train_gen( i , idx ,noise ,tags )
                     
                     self.fake_img = self.gener( tags ,self.make_noise( noise.size(0) ) ).detach()
                     self.train_dis( i , idx , img/255*2 - 1 , tags , w_tags )
-                    
+                    self.train_dis( i , idx , img/255*2 - 1 , tags , w_tags )
+
                     if idx % 100 ==0:
                         name =  "epo_" + str( i ) + "iterater" + str(idx)
                         cv2.namedWindow(name, cv2.WINDOW_NORMAL)
@@ -57,9 +57,19 @@ class Gan(object):
                         #print( self.fake_img.data.numpy()[-1] )
                         cv2.waitKey(1)
                         cv2.destroyAllWindows()
-                        name = "new_info_image_text/" + "epo_" + str( i ) + "iterater" + str(idx) +"/"
+                        name = "new_info_image_text_showing score/" + "epo_" + str( i ) + "iterater" + str(idx) +"/"
                         os.makedirs( os.path.dirname( name ), exist_ok=True )
                         cv2.imwrite( name+"img.jpg" , (self.fake_img.data.numpy()[-1]/2+0.5)*255 )
+                        
+                        img = img.view( img.size()[0] ,  64 ,64 ,3 )
+
+                        #print( img[-1].size() )
+                        #print( (img[-1].numpy()/255*2 - 1 )/2+0.5  )
+                        #cv2.imshow( name,( img[-1].numpy()/255*2 - 1 )/2+0.5 )
+                        #cv2.waitKey(0)
+                        #cv2.destroyAllWindows()
+                        #cv2.imwrite( name+str(tags.numpy()[-1])+"img.jpg" , (( img[-1].numpy()/255*2 - 1 )/2+0.5)*255 )
+                        
                         torch.save( self.gener ,name+"generator.pt" )
                         torch.save( self.discr ,name+"discriminator.pt" )
                     
@@ -181,11 +191,14 @@ class Gan(object):
         lost = lost/2
         lost.backward()
         self.di_optimizer.step()
+        self.di_optimizer.zero_grad()
         i_eval = self.discr( w_tags , img )
         i_lost = self.d_loss(  i_eval , i_label )
         i_lost.backward()
         self.di_optimizer.step()
         #print( f_pre.norm() )
+        np.set_printoptions(precision=4, suppress=True)
+        print( 'label score {:.3f}  , fake img score {:.3f} '.format( np.mean(f_pre.detach().numpy()) , np.mean(i_eval.detach().numpy() )) )
         print( 'Train Epoch {} , batch_num :{}, Loss: {:.6f}'.format( epo+1  , idx+1 , lost.data.item() )  )
 
         '''
@@ -251,8 +264,7 @@ class Gan(object):
 class Generator(nn.Module):
     def __init__(self):
         super( Generator , self).__init__()
-        self.taglay    = nn.Linear( 24 , 119 )
-        self.to128     = nn.Linear( 119 + 128 ,128 )
+        self.to128     = nn.Linear( 24 + 128 ,128 )
         self.main = nn.Sequential(
                 # [128, 1, 1] -> [-1, 1025, 4, 4]
                 nn.ConvTranspose2d( 128 , 1024, 4, 1, 0),
@@ -277,7 +289,6 @@ class Generator(nn.Module):
             )
 
     def forward(self ,text_input ,noise_input):
-        text_input = self.taglay( text_input )
         x = torch.cat( (text_input , noise_input), 1 )
 
         x = self.to128( x )
@@ -311,21 +322,19 @@ class Discriminator(nn.Module):
                 nn.Conv2d(512, 1024, 4, 2, 1),
                 nn.BatchNorm2d(1024),
                 nn.LeakyReLU(0.1, inplace=True),
+
+                nn.Conv2d( 1024 , 1024 , 4 , 1, 0 ),
+                #1024 , 1 ,1
         )
-        self.taglay = nn.Linear( 24 , 32 )
-              #1024 , 4 , 4
-        self.last = nn.Conv2d(1024, 1 , 5, 1, 0)
-           
+             
+        self.last = nn.Linear( 1024+24 ,1 )
 
     def forward(self , input_text , pic):
         pic = self.main( pic )
         #print(pic.size())
         #print( input_text.size() )
         pic = pic.view( pic.size(0) , -1 )
-        input_text = self.taglay( input_text )
-        input_text = input_text.view( input_text.size(0) , -1)
-        input_text = input_text.repeat( ( 1 , 72*4 ) )
-        x  = torch.cat( (pic , input_text) ,1 ).view( input_text.size(0) , 1024 , 5 , 5 )
+        x  = torch.cat( (pic , input_text) ,1 ).view( input_text.size(0) , 1048 )
         x  = torch.sigmoid( self.last( x ).view( x.size(0) , 1 ) )
         return x
 
